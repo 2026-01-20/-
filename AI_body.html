@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>からだチェック記録 × グラフ分析</title>
+
+  <!-- Chart.js（JS側で使用） -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* ========= 基本 ========= */
+    :root {
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --border:#e2e6f0;
+      --primary:#2563eb;
+      --text:#1f2937;
+      --muted:#6b7280;
+    }
+
+    * { box-sizing:border-box; }
+
+    body {
+      margin:0;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    /* ========= ヘッダー ========= */
+    header {
+      position:sticky;
+      top:0;
+      z-index:10;
+      background:var(--card);
+      border-bottom:1px solid var(--border);
+      padding:14px 20px;
+    }
+    header h1 {
+      margin:0;
+      font-size:18px;
+    }
+    header p {
+      margin:4px 0 0;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    /* ========= レイアウト ========= */
+    .container {
+      max-width:1200px;
+      margin:0 auto;
+      padding:16px;
+      display:grid;
+      grid-template-columns:2fr 1fr;
+      gap:16px;
+    }
+    @media (max-width:900px){
+      .container { grid-template-columns:1fr; }
+    }
+
+    section {
+      background:var(--card);
+      border-radius:10px;
+      border:1px solid var(--border);
+      padding:14px;
+    }
+    section + section { margin-top:14px; }
+
+    h2 {
+      font-size: 15px;
+      margin: 0 0 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2 .inline-btn {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    h2 .inline-btn:hover {
+      background: #f3f4f6;
+    }
+
+    h2 span {
+      font-size:11px;
+      color:var(--muted);
+      font-weight:normal;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header h1,
+    header p {
+      margin: 0;
+    }
+
+    header .header-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #langToggle {
+      margin-left: auto; /* ← 右寄せの本体 */
+    }
+
+    /* =========================
+      ファイル管理UI
+    ========================= */
+    .sidebar-section {
+      position: relative;
+      overflow: visible;
+      z-index: 1;
+      font-size: 90%;
+    }
+
+    /* ファイル操作行（セレクト＋新規＋削除） */
+    .file-controls {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    /* セレクトボックス */
+    #fileSelect {
+      flex: 1;
+      min-width: 0;
+      max-width: 100%;
+      position: relative;
+      z-index: 10;
+      padding: 4px;
+      font-size: 90%;
+    }
+
+    /* 新規ファイル名入力 */
+    #newFileName {
+      width: 6em;
+      padding: 4px;
+      font-size: 90%;
+    }
+
+    /* ボタン共通 */
+    .sidebar-section button.ghost {
+      padding: 4px 6px;
+      font-size: 90%;
+      cursor: pointer;
+      background: none;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .sidebar-section button.ghost:hover {
+      background: #f0f0f0;
+    }
+
+    /* 削除ボタン（赤） */
+    #deleteFile {
+      color: #b91c1c;
+      border-color: #e5e5e5;
+    }
+
+    /* 現在のファイル名表示（控えめ） */
+    #currentFileLabel {
+      margin-top: 6px;
+      font-size: 90%;
+      color: #555;
+    }
+
+    /* ========= フォーム ========= */
+    form {
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:10px;
+    }
+    .full { grid-column:1/-1; }
+
+    label {
+      font-size:12px;
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+
+    input, select, textarea {
+      padding:7px 8px;
+      font-size:13px;
+      border-radius:6px;
+      border:1px solid var(--border);
+    }
+    textarea {
+      min-height:50px;
+      resize:vertical;
+    }
+
+    button {
+      border:none;
+      border-radius:999px;
+      padding:8px 14px;
+      font-size:13px;
+      cursor:pointer;
+    }
+    .primary {
+      background:var(--primary);
+      color:#fff;
+    }
+    .ghost {
+      background:transparent;
+      border:1px solid var(--border);
+    }
+
+    /* ========= テーブル ========= */
+    table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:12px;
+    }
+    thead { background:#f1f3f9; }
+    th, td {
+      padding:6px;
+      border-bottom:1px solid var(--border);
+    }
+
+    .empty {
+      text-align:center;
+      color:var(--muted);
+      padding:14px;
+    }
+
+    /* 削除列を完全中央固定 */
+    th:last-child,
+    td:last-child {
+      width: 70px;
+      text-align: center;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    /* ボタン自体をコンパクト化 */
+    td:last-child button {
+      padding: 4px 10px;
+      font-size: 11px;
+      line-height: 1;
+    }
+
+    /* ヘッダ中央揃え */
+    thead th {
+      text-align: center;
+    }
+
+    /* デフォルトは左（メモなど） */
+    tbody td {
+      text-align: left;
+    }
+
+    /* 中央揃えにしたい列 */
+    tbody td:nth-child(1), /* 時間 */
+    tbody td:nth-child(2), /* 部位 */
+    tbody td:nth-child(3), /* 症状 */
+    tbody td:nth-child(4), /* 強さ */
+    tbody td:nth-child(6)  /* 削除 */
+    {
+      text-align: center;
+    }
+
+    .editing-mode {
+      background-color: #fff7d6;
+      border: 1px solid #facc15;
+      border-radius: 6px;
+      padding: 8px;
+      transition: background-color 0.3s;
+    }
+
+header {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+}
+
+.header-left {
+  flex: 1;                /* 左側ができるだけ幅を使う */
+  display: flex;
+  flex-direction: column;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 8px;               /* ボタン同士の間隔 */
+}
+
+.info-btn,
+.feedback-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.info-btn:hover,
+.feedback-btn:hover {
+  background: #f3f4f6;
+}
+
+
+    /* ========= 強度タグ ========= */
+    .tag {
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:11px;
+    }
+    .weak { background:#e0f2fe; }
+    .mid { background:#fef9c3; }
+    .strong { background:#fee2e2; }
+
+    /* ========= フィルタ ========= */
+    .filter-group {
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      font-size:12px;
+    }
+
+    /* ========= グラフ ========= */
+    .graph-panel {
+      height:260px;
+    }
+
+    /* =========================
+      文字起こしモーダル用CSS
+      ========================= */
+      /* タイムライン見出し行のボタン位置を最適化 */
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 6px; 
+    }
+
+    h2 span {
+      margin-right: auto; 
+    }
+
+    h2 .inline-btn {
+      border-radius: 80px; 
+      font-size: 11px; 
+    }
+
+    /* 背景オーバーレイ */
+    #exportModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 1000;
+      display: none;   
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* モーダル本体 */
+    #exportModal > div {
+      background: #ffffff;
+      width: 90%;
+      max-width: 720px;
+
+      height: 90vh;
+      max-height: 90vh;
+
+      padding: 14px;
+      border-radius: 10px;
+
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+
+    /* タイトル */
+    #exportModal h3 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    /* 文字起こしテキストエリア */
+    #exportText {
+      flex: 1;                  /* 残り高さをすべて使う */
+      width: 100%;
+      min-height: 60vh;         /* 初期表示でも十分な高さ */
+
+      font-size: 12px;
+      line-height: 1.6;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+      white-space: pre;         /* 改行・整形を保持 */
+      overflow-y: auto;         /* スクロールはここだけ */
+
+      border: 1px solid #e2e6f0;
+      border-radius: 6px;
+      padding: 8px;
+
+      background: #f9fafb;
+    }
+
+    /* 下部ボタンエリア */
+    #exportModal .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    /* モバイル（アドレスバー考慮） */
+    @supports (height: 100dvh) {
+      #exportModal > div {
+        height: 90dvh;
+        max-height: 90dvh;
+      }
+    }
+
+    #copyExportText {
+      transition: all 0.2s ease;
+    }
+
+   #copyToast {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+
+    font-size: 12px;
+    color: #6b7280;
+
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+
+    z-index: 2000;
+  }
+
+  </style>
+</head>
+
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>からだチェック記録 × グラフ分析</h1>
+    <p>記録 → 絞り込み → 傾向把握</p>
+  </div>
+
+  <div class="header-buttons">
+    <button class="info-btn">サイト説明</button>
+    <a href="https://forms.office.com/Pages/ResponsePage.aspx?id=DQSIkWdsW0yxEjajBLZtrQAAAAAAAAAAAAMAAGI3LWlUQlhQNENWWEFIMElMQjlTOFA3SldWTEUzWi4u" target="_blank" class="feedback-btn">
+      ご意見・ご感想はここから
+    </a>
+  </div>
+</header>
+
+
+<div class="container">
+
+  <!-- ===== 左カラム ===== -->
+  <div>
+    <section class="sidebar-section">
+      <div class="file-controls">
+      <select id="fileSelect"></select>
+      <button id="createFile" class="ghost" title="新規作成">＋</button>
+      <button id="deleteFile" class="ghost" title="削除">🗑️</button>
+    </div>
+    </section>
+
+    <!-- 記録 -->
+    <section>
+      <h2 id="recordTitle">記録 <span>今の状態</span></h2>
+
+      <form id="entryForm">
+        <label>
+          時間
+          <input type="datetime-local" id="time">
+        </label>
+
+        <label>
+          部位
+          <input type="text" id="part">
+        </label>
+
+        <label>
+          症状
+          <input type="text" id="symptom">
+        </label>
+
+        <label>
+          強さ
+          <select id="intensity">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3" selected>3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </label>
+
+        <label class="full">
+          メモ
+          <textarea id="notes"></textarea>
+        </label>
+
+        <button type="submit" class="primary full">
+          記録する
+        </button>
+      </form>
+    </section>
+
+    <!-- タイムライン -->
+    <section>
+      <h2 id="timelineTitle">
+        タイムライン
+        <button id="exportTextBtn" class="ghost inline-btn">
+          データを文字に出力
+        </button>
+      </h2>
+
+      <table>
+        <colgroup>
+          <col style="width:140px">
+          <col style="width:80px">
+          <col style="width:140px">
+          <col style="width:70px">
+          <col>
+          <col style="width:70px">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>時間</th>
+            <th>部位</th>
+            <th>症状</th>
+            <th>強さ</th>
+            <th>メモ</th>
+            <th></th>
+          </tr>
+        </thead>
+
+        <tbody id="timeline">
+          <!-- JSで描画 -->
+        </tbody>
+      </table>
+    </section>
+
+    <button id="undoDelete" class="ghost" style="display:none; margin-top:8px;">
+      直前の削除を元に戻す
+    </button>
+
+  </div>
+
+  <!-- ===== 右カラム ===== -->
+  <div>
+
+    <!-- 絞り込み -->
+    <section>
+      <h2 id="filterTitle">絞り込み</h2>
+
+      <div class="filter-group">
+        <input type="text" id="fPart" placeholder="部位">
+        <input type="text" id="fSymptom" placeholder="症状">
+        
+        <label>
+          開始日時
+          <input type="datetime-local" id="fStart">
+        </label>
+
+        <label>
+          終了日時
+          <input type="datetime-local" id="fEnd">
+        </label>
+
+        <label>強さ</label>
+        <div id="intensityFilter" style="display:flex; gap:6px;">
+          <label><input type="checkbox" value="1">1</label>
+          <label><input type="checkbox" value="2">2</label>
+          <label><input type="checkbox" value="3">3</label>
+          <label><input type="checkbox" value="4">4</label>
+          <label><input type="checkbox" value="5">5</label>
+        </div>
+
+                <label>曜日</label>
+        <div id="weekdayFilter" style="display:flex; gap:6px;">
+          <label><input type="checkbox" value="1">月</label>
+          <label><input type="checkbox" value="2">火</label>
+          <label><input type="checkbox" value="3">水</label>
+          <label><input type="checkbox" value="4">木</label>
+          <label><input type="checkbox" value="5">金</label>
+          <label><input type="checkbox" value="6">土</label>
+          <label><input type="checkbox" value="0">日</label>
+        </div>
+
+        <div>
+          <label>時間帯</label>
+          <div id="timeRanges"></div>
+
+          <button type="button" class="ghost" id="addTimeRange">
+            ＋
+          </button>
+        </div>
+
+        <button type="button" class="primary" id="applyFilter">
+          絞り込みを適用
+        </button>
+
+        <button type="button" class="ghost" id="reset">
+          リセット
+        </button>
+      </div>
+    </section>
+
+    <!-- グラフ -->
+    <section>
+      <h2>グラフ</h2>
+
+      <div class="filter-group">
+        <label>
+          X軸
+          <select id="xAxis">
+            <option value="daily">日付</option>
+            <option value="period">時間帯</option>
+            <option value="part">部位</option>
+            <option value="symptom">症状</option>
+          </select>
+        </label>
+
+        <label>
+          Y軸
+          <select id="yAxis">
+            <option value="count">件数</option>
+            <option value="avg">平均強さ</option>
+            <option value="max">最大強さ</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="graph-panel">
+        <canvas id="chart"></canvas>
+      </div>
+    </section>
+  </div>
+
+  <div id="exportModal" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.4);
+  z-index:1000;
+  align-items:center;
+  justify-content:center;
+">
+  <div style="
+    background:#fff;
+    width:90%;
+    max-width:700px;
+    max-height:80vh;
+    padding:14px;
+    border-radius:10px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  ">
+    <h3 style="margin:0;">タイムライン文字起こし</h3>
+
+    <textarea
+      id="exportText"
+      readonly
+      style="
+        flex:1;
+        width:100%;
+        font-size:12px;
+        line-height:1.6;
+        white-space:pre;
+      ">
+    </textarea>
+
+    <div style="display:flex; gap:6px; justify-content:flex-end;">
+      <button id="copyExportText" class="ghost">コピー</button>
+      <button id="closeExportModal" class="primary">閉じる</button>
+    </div>
+
+  </div>
+</div>
+</div>
+<div id="copyToast">コピーしました</div>
+</body>
+
+<script>
+const exportText = document.getElementById("exportText");
+const exportModal = document.getElementById("exportModal");
+const entryForm = document.getElementById("entryForm");
+const time = document.getElementById("time");
+const part = document.getElementById("part");
+const symptom = document.getElementById("symptom");
+const intensity = document.getElementById("intensity");
+const notes = document.getElementById("notes");
+
+const infoBtn = document.querySelector(".info-btn");
+
+// モーダル作成
+const infoModal = document.createElement("div");
+infoModal.style.cssText = `
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.4);
+  z-index:1200;
+  align-items:center;
+  justify-content:center;
+`;
+
+infoModal.innerHTML = `
+  <div style="
+    background:#fff;
+    padding:16px;
+    border-radius:10px;
+    max-width:500px;
+    width:90%;
+    max-height:80vh;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  ">
+    <h3>サイト説明</h3>
+    <p>
+    このサイトでは、ご自身の体の状態を簡単に記録できます。<br>
+    入力したデータは自動でまとめられ、グラフ化も可能ですので、日々の傾向を把握するのに役立ちます。<br>
+    医師に見せる資料としても便利です。<br>
+    また、記録を文書として出力することもでき、個人でご利用のAIアプリ等を使って体調の変化を整理することも可能です。<br><br>
+    ご安心ください。個人情報は一切取得しておらず、安全にご利用いただけます。<br><br>
+    皆さまの体調管理が少しでも楽になることを願っています。
+    </p>
+    <button id="closeInfoModal" class="ghost">閉じる</button>
+  </div>
+`;
+document.body.appendChild(infoModal);
+
+// ボタンクリックで表示
+infoBtn.addEventListener("click", () => {
+  infoModal.style.display = "flex";
+});
+
+// 閉じるボタン
+document.getElementById("closeInfoModal").addEventListener("click", () => {
+  infoModal.style.display = "none";
+});
+
+
+/* =========================
+   定数・状態
+========================= */
+let entries = [];
+let filtered = [];
+let chartInstance = null;
+
+/* =========================
+   file
+========================= */
+let currentFile = null;
+const FILE_PREFIX = "body_check_";
+
+// ファイル一覧を取得
+function getFileList() {
+  return Object.keys(localStorage)
+    .filter(k => k.startsWith(FILE_PREFIX))
+    .map(k => k.replace(FILE_PREFIX, ""));
+}
+
+// ファイルを読み込む
+function loadFile(name) {
+  currentFile = name;
+
+  const raw = localStorage.getItem(FILE_PREFIX + name);
+  entries = raw ? JSON.parse(raw).map(e => ({ ...e, time: new Date(e.time) })) : [];
+
+  deletedStack = JSON.parse(sessionStorage.getItem("deletedStack_" + name) || "[]");
+
+  document.getElementById("undoDelete").style.display = deletedStack.length ? "" : "none";
+
+  applyFilter();
+  renderAll();
+  updateFileSelect();
+}
+
+// ファイル一覧をセレクトに反映
+function updateFileSelect() {
+  const select = document.getElementById("fileSelect");
+  const files = getFileList();
+
+  select.innerHTML = "";
+  files.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === currentFile) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+// ファイル作成
+document.getElementById("createFile").addEventListener("click", () => {
+  const name = prompt("新しいファイル名を入力してください");
+  if (!name) return;
+  if (getFileList().includes(name)) return alert("そのファイル名はすでに存在します");
+
+  localStorage.setItem(FILE_PREFIX + name, "[]");
+  sessionStorage.setItem("deletedStack_" + name, "[]");
+  loadFile(name);
+});
+
+
+// ファイル切り替え
+document.getElementById("fileSelect").addEventListener("change", e => {
+  loadFile(e.target.value);
+});
+
+/* =========================
+   削除履歴スタック（セッション中保持）
+========================= */
+let deletedStack = [];
+
+/* =========================
+   記録保存
+========================= */
+entryForm.addEventListener("submit", e => {
+  e.preventDefault();
+
+  const editingId = entryForm.dataset.editingId; // 編集ID取得
+  const isEditing = !!editingId;                // 編集モード判定
+
+  const newEntry = {
+    id: isEditing ? Number(editingId) : Date.now(),
+    time: new Date(time.value),
+    part: part.value.trim(),
+    symptom: symptom.value.trim(),
+    intensity: Number(intensity.value),
+    notes: notes.value.trim()
+  };
+
+  if (isEditing) {
+    const index = entries.findIndex(e => e.id === Number(editingId));
+    if (index !== -1) {
+      entries[index] = newEntry;
+    }
+  } else {
+    entries.push(newEntry);
+  }
+
+  localStorage.setItem(FILE_PREFIX + currentFile, JSON.stringify(entries));
+
+  entryForm.reset();
+  intensity.value = 3;
+  time.value = new Date(Date.now() + 9 * 3600000).toISOString().slice(0,16);
+
+  delete entryForm.dataset.editingId;
+  entryForm.querySelector("button").textContent = "記録する";
+  entryForm.classList.remove("editing-mode"); 
+
+  applyFilter();
+  renderAll();
+});
+
+
+/* =========================
+   フィルタ処理（完全版）
+========================= */
+function applyFilter() {
+  // 曜日（チェックされたものだけ有効）
+  const checkedDays = [...document.querySelectorAll(
+    "#weekdayFilter input:checked"
+  )].map(cb => Number(cb.value));
+
+  // 強さ（1〜5 チェック式）
+  const checkedIntensity = [...document.querySelectorAll(
+    "#intensityFilter input:checked"
+  )].map(cb => Number(cb.value));
+
+  // 時間帯（複数レンジ OR）
+  const timeRanges = [...document.querySelectorAll("#timeRanges > div")]
+    .map(div => ({
+      start: Number(div.querySelector(".start").value),
+      end: Number(div.querySelector(".end").value)
+    }));
+
+  filtered = entries.filter(e => {
+    // 部位
+    if (fPart.value && !e.part.includes(fPart.value)) return false;
+
+    // 症状
+    if (fSymptom.value && !e.symptom.includes(fSymptom.value)) return false;
+
+    // 強さ（OR）
+    if (checkedIntensity.length &&
+        !checkedIntensity.includes(e.intensity)) {
+      return false;
+    }
+
+    // 開始日時
+    if (fStart.value && e.time < new Date(fStart.value)) return false;
+
+    // 終了日時
+    if (fEnd.value && e.time > new Date(fEnd.value)) return false;
+
+    // 曜日（OR）
+    if (checkedDays.length &&
+        !checkedDays.includes(e.time.getDay())) {
+      return false;
+    }
+
+    // 時間帯（OR）
+    const isCustomTimeRange =
+      timeRanges.some(r => r.start !== 0 || r.end !== 24);
+
+    if (isCustomTimeRange) {
+      const hour = e.time.getHours();
+      const hit = timeRanges.some(r =>
+        hour >= r.start && hour < r.end
+      );
+      if (!hit) return false;
+    }
+
+    return true;
+  });
+}
+const fStart = document.getElementById("fStart");
+const fEnd = document.getElementById("fEnd");
+
+// ★ここに置く★
+fStart.addEventListener("focus", () => {
+  if (!fStart.value) {
+    const today = new Date().toISOString().split("T")[0];
+    fStart.value = `${today}T00:00`;
+  }
+});
+
+fEnd.addEventListener("focus", () => {
+  if (!fEnd.value) {
+    const today = new Date().toISOString().split("T")[0];
+    fEnd.value = `${today}T23:59`;
+  }
+});
+
+/* =========================
+   曜日・時間帯フィルタ用
+========================= */
+
+// 時間帯レンジ生成
+// 時間帯レンジ生成（初期値 0:00 - 23:59）
+function createTimeRange(start = 0, end = 23.9833) { // 23:59 ≒ 23.9833h
+  const div = document.createElement("div");
+  div.style.display = "flex";
+  div.style.gap = "6px";
+  div.style.alignItems = "center";
+
+  div.innerHTML = `
+    <input type="range" min="0" max="23" step="1" value="${Math.floor(start)}" class="start">
+    <input type="range" min="0" max="23" step="1" value="${Math.floor(end)}" class="end">
+    <span class="label"></span>
+    <button type="button" class="ghost remove">×</button>
+  `;
+
+  const startInput = div.querySelector(".start");
+  const endInput   = div.querySelector(".end");
+  const label      = div.querySelector(".label");
+
+  const update = () => {
+    let s = Number(startInput.value);
+    let e = Number(endInput.value);
+    if (s >= e) e = s + 1;
+    if (e > 23) e = 23; // 上限23
+    endInput.value = e;
+    label.textContent = `${s}:00 - ${e}:59`; // 23:59 表示
+  };
+
+  startInput.addEventListener("input", update);
+  endInput.addEventListener("input", update);
+
+  div.querySelector(".remove").onclick = () => div.remove();
+
+  update();
+  return div;
+}
+
+// レンジ追加
+document.getElementById("addTimeRange")
+  .addEventListener("click", () => {
+    document.getElementById("timeRanges")
+      .appendChild(createTimeRange());
+  });
+
+/* =========================
+   全体再描画
+========================= */
+function renderAll() {
+  renderTimeline();
+  renderGraph();
+}
+
+/* =========================
+   タイムライン
+========================= */
+function renderTimeline() {
+  timeline.innerHTML = "";
+
+  if (!filtered.length) {
+    timeline.innerHTML =
+      `<tr><td colspan="6" class="empty">該当なし</td></tr>`;
+    return;
+  }
+
+  filtered.slice(-20).reverse().forEach(e => {
+    const cls =
+      e.intensity <= 2 ? "weak" :
+      e.intensity >= 4 ? "strong" : "mid";
+
+    timeline.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td>${e.time.toLocaleString()}</td>
+        <td>${e.part || "—"}</td>
+        <td>${e.symptom || "—"}</td>
+        <td><span class="tag ${cls}">${e.intensity}</span></td>
+        <td>${e.notes || ""}</td>
+        <td>
+          <button class="ghost edit-btn" data-id="${e.id}">編集</button>
+          <button class="ghost delete-btn" data-delete-id="${e.id}">削除</button>
+        </td>
+      </tr>
+    `);
+  });
+
+  // 削除イベント登録
+  timeline.querySelectorAll(".delete-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      deleteEntry(Number(btn.dataset.deleteId));
+    });
+  });
+
+  // 編集イベント登録
+  timeline.querySelectorAll(".edit-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.id);
+      const entry = entries.find(e => e.id === id);
+      if (!entry) return;
+
+      time.value = new Date(entry.time).toISOString().slice(0,16);
+      part.value = entry.part;
+      symptom.value = entry.symptom;
+      intensity.value = entry.intensity;
+      notes.value = entry.notes;
+
+      entryForm.dataset.editingId = id;
+      entryForm.querySelector("button").textContent = "更新";
+      entryForm.classList.add("editing-mode");
+    });
+  });
+}
+
+/* =========================
+   削除処理（履歴に追加して削除）
+========================= */
+function deleteEntry(id) {
+  const index = entries.findIndex(e => e.id === id);
+  if (index === -1) return;
+
+  const deleted = entries[index];
+  deletedStack.push(deleted);
+  sessionStorage.setItem("deletedStack_" + currentFile, JSON.stringify(deletedStack));
+
+  entries.splice(index, 1);
+  localStorage.setItem(FILE_PREFIX + currentFile, JSON.stringify(entries));
+
+  document.getElementById("undoDelete").style.display = "";
+  applyFilter();
+  renderAll();
+}
+
+/* =========================
+   戻す処理（履歴から復元）
+========================= */
+document.getElementById("undoDelete").addEventListener("click", () => {
+  if (!deletedStack.length) return;
+
+  const restored = deletedStack.pop();
+  sessionStorage.setItem("deletedStack_" + currentFile, JSON.stringify(deletedStack));
+
+  entries.push({ ...restored, time: new Date(restored.time) });
+  entries.sort((a, b) => a.time - b.time);
+  localStorage.setItem(FILE_PREFIX + currentFile, JSON.stringify(entries));
+
+  if (!deletedStack.length) {
+    document.getElementById("undoDelete").style.display = "none";
+  }
+
+  applyFilter();
+  renderAll();
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  // ======================
+  // ファイル初期ロード
+  // ======================
+  const files = getFileList();
+  if (files.length) {
+    loadFile(files[0]);
+  } else {
+    localStorage.setItem(FILE_PREFIX + "default", "[]");
+    sessionStorage.setItem("deletedStack_default", "[]");
+    loadFile("default");
+  }
+
+  // ======================
+  // 入力初期時刻（JST）
+  // ======================
+  document.getElementById("time").value =
+    new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 16);
+
+  // ======================
+  // 時間帯フィルタ：初期1件保証
+  // ======================
+  const tr = document.getElementById("timeRanges");
+  if (tr && !tr.children.length) {
+    tr.appendChild(createTimeRange());
+  }
+});
+
+/* =========================
+   グラフ描画
+========================= */
+function renderGraph() {
+  const canvas = document.getElementById("chart");
+  const ctx = canvas.getContext("2d");
+
+  if (!filtered.length) {
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
+    }
+    return;
+  }
+
+  const xType = xAxis.value;
+  const yType = yAxis.value;
+
+  const summary = {};
+
+  filtered.forEach(e => {
+    let key = "未指定";
+
+    switch (xType) {
+      case "daily":
+        key = e.time.toISOString().slice(0, 10);
+        break;
+      case "period":
+        const h = e.time.getHours();
+        key = h < 6 ? "夜" : h < 12 ? "朝" : h < 18 ? "昼" : "夕";
+        break;
+      case "part":
+        key = e.part || "未指定";
+        break;
+      case "symptom":
+        key = e.symptom || "未指定";
+        break;
+    }
+
+    if (!summary[key]) {
+      summary[key] = { count: 0, sum: 0, max: 0 };
+    }
+
+    summary[key].count++;
+    summary[key].sum += e.intensity;
+    summary[key].max = Math.max(summary[key].max, e.intensity);
+  });
+
+  let labels = Object.keys(summary);
+  if (xType === "daily") labels.sort();
+
+  let data = [];
+  let labelText = "";
+
+  switch (yType) {
+    case "avg":
+      data = labels.map(k => +(summary[k].sum / summary[k].count).toFixed(2));
+      labelText = "平均強さ";
+      break;
+    case "max":
+      data = labels.map(k => summary[k].max);
+      labelText = "最大強さ";
+      break;
+    default:
+      data = labels.map(k => summary[k].count);
+      labelText = "件数";
+  }
+
+  if (chartInstance) chartInstance.destroy();
+
+  chartInstance = new Chart(ctx, {
+    type: xType === "daily" ? "line" : "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: labelText,
+        data: data,
+        borderWidth: 2,
+        borderColor: getComputedStyle(document.documentElement)
+          .getPropertyValue("--primary")
+          .trim(),
+        backgroundColor: xType === "daily"
+          ? getComputedStyle(document.documentElement)
+              .getPropertyValue("--primary")
+              .trim() + "40"   // 透明度25%
+          : getComputedStyle(document.documentElement)
+              .getPropertyValue("--primary")
+              .trim() + "B3",  // 透明度70%
+        fill: xType === "daily",
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: yType !== "count" ? 5 : undefined
+        }
+      }
+    }
+  });
+}
+
+/* =========================
+   イベント登録（修正版・確定）
+========================= */
+// ファイル削除ボタン
+document.getElementById("deleteFile").addEventListener("click", () => {
+  if (!currentFile) return;
+
+  const confirmDelete = confirm(`「${currentFile}」を削除しますか？この操作は元に戻せません。`);
+  if (!confirmDelete) return;
+
+  const deletedName = currentFile; // ← ここで退避！
+
+  // localStorage と sessionStorage から削除
+  localStorage.removeItem(FILE_PREFIX + deletedName);
+  sessionStorage.removeItem("deletedStack_" + deletedName);
+
+  // ファイル一覧を更新
+  const files = getFileList().filter(name => name !== deletedName);
+
+  if (files.length) {
+    loadFile(files[0]); // 残っているファイルを読み込む
+  } else {
+    const fallback = "default";
+    localStorage.setItem(FILE_PREFIX + fallback, "[]");
+    sessionStorage.setItem("deletedStack_" + fallback, "[]");
+    loadFile(fallback);
+  }
+
+  alert(`「${deletedName}」を削除しました。`);
+});
+
+// 絞り込み適用
+document.getElementById("applyFilter").addEventListener("click", () => {
+  applyFilter();
+  renderAll();
+});
+
+// リセット
+document.getElementById("reset").addEventListener("click", () => {
+  fPart.value = "";
+  fSymptom.value = "";
+  fStart.value = "";
+  fEnd.value = "";
+
+  document
+    .querySelectorAll("#weekdayFilter input")
+    .forEach(cb => cb.checked = false);
+
+  document
+    .querySelectorAll("#intensityFilter input")
+    .forEach(cb => cb.checked = false);
+
+  const container = document.getElementById("timeRanges");
+  container.innerHTML = "";
+  container.appendChild(createTimeRange());
+
+  applyFilter();
+  renderAll();
+});
+
+// ★ X軸変更 → 即グラフ再描画
+document.getElementById("xAxis").addEventListener("change", () => {
+  renderGraph();
+});
+
+// ★ Y軸変更 → 即グラフ再描画
+document.getElementById("yAxis").addEventListener("change", () => {
+  renderGraph();
+});
+
+
+function openExportModal() {
+  const modal = document.getElementById("exportModal");
+  const textarea = document.getElementById("exportText");
+
+  const text = filtered
+    .map(e => {
+      const date = e.time.toLocaleString();
+      return `${date} / ${e.part} / ${e.symptom} / 強さ:${e.intensity}\n${e.notes || ""}`;
+    })
+    .join("\n\n");
+
+  textarea.value = text;
+  modal.style.display = "flex";
+}
+
+document.getElementById("exportTextBtn")
+  .addEventListener("click", openExportModal);
+
+document.getElementById("closeExportModal")
+  .addEventListener("click", () => {
+    exportModal.style.display = "none";
+  });
+
+const copyBtn = document.getElementById("copyExportText");
+const toast = document.getElementById("copyToast");
+
+copyBtn.addEventListener("click", () => {
+  exportText.select();
+  document.execCommand("copy");
+
+  copyBtn.textContent = "コピーしました";
+  copyBtn.style.opacity = "0.65";
+
+  toast.style.opacity = "1";
+
+  setTimeout(() => {
+    copyBtn.textContent = "コピー";
+    copyBtn.style.opacity = "";
+    toast.style.opacity = "0";
+  }, 1200);
+});
+
+</script>
+
+</body>
+</html>
